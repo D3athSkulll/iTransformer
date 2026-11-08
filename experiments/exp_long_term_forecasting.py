@@ -1,6 +1,6 @@
 from data_provider.data_factory import data_provider
 from experiments.exp_basic import Exp_Basic
-from utils.tools import EarlyStopping, adjust_learning_rate, visual
+from utils.tools import EarlyStopping, adjust_learning_rate, visual , save_learning_curve
 from utils.metrics import metric
 import torch
 import torch.nn as nn
@@ -95,6 +95,7 @@ class Exp_Long_Term_Forecast(Exp_Basic):
 
         model_optim = self._select_optimizer()
         criterion = self._select_criterion()
+        history = {'epoch': [], 'train_loss': [], 'vali_loss': []}
 
         if self.args.use_amp:
             scaler = torch.cuda.amp.GradScaler()
@@ -165,10 +166,15 @@ class Exp_Long_Term_Forecast(Exp_Basic):
             print("Epoch: {} cost time: {}".format(epoch + 1, time.time() - epoch_time))
             train_loss = np.average(train_loss)
             vali_loss = self.vali(vali_data, vali_loader, criterion)
-            test_loss = self.vali(test_data, test_loader, criterion)
 
-            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f} Test Loss: {4:.7f}".format(
-                epoch + 1, train_steps, train_loss, vali_loss, test_loss))
+            history['epoch'].append(epoch + 1)
+            history['train_loss'].append(float(train_loss))
+            history['vali_loss'].append(float(vali_loss))
+            
+            print("Epoch: {0}, Steps: {1} | Train Loss: {2:.7f} Vali Loss: {3:.7f}".format(
+                 epoch + 1, train_steps, train_loss, vali_loss))
+            if self.args.save_learning_curve:
+                save_learning_curve(history, os.path.join(path, 'learning_curve.png'))
             early_stopping(vali_loss, self.model, path)
             if early_stopping.early_stop:
                 print("Early stopping")
@@ -261,8 +267,11 @@ class Exp_Long_Term_Forecast(Exp_Basic):
         if not os.path.exists(folder_path):
             os.makedirs(folder_path)
 
-        mae, mse, rmse, mape, mspe = metric(preds, trues)
-        print('mse:{}, mae:{}'.format(mse, mae))
+        mae, mse, rmse, mape, mspe, r2, evs, medae, maxerr, smape, wape = metric(preds,trues)
+        print('mse:{}, mae:{}, wape:{}'.format(mse, mae, wape))
+        print('rmse:{}, mape:{}, mspe:{}'.format(rmse, mape, mspe))
+        print('r2:{}, evs:{}, medae:{}'.format(r2, evs, medae))
+        print('medae:{}, maxerr:{}, smape:{}'.format(medae, maxerr, smape))
         f = open("result_long_term_forecast.txt", 'a')
         f.write(setting + "  \n")
         f.write('mse:{}, mae:{}'.format(mse, mae))
